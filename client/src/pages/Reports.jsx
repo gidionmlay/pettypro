@@ -1,6 +1,255 @@
-import React from 'react';
-import PagePlaceholder from '../components/ui/PagePlaceholder';
+import React, { useState, useEffect } from 'react';
+import axios from '../api/axios';
+import PettyCashTable from '../components/PettyCashTable';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+import { formatCurrency, formatDate } from '../utils/formatters';
+import { FileEarmarkPdfFill, FunnelFill, ArrowClockwise } from 'react-bootstrap-icons';
 
-const Reports = () => <PagePlaceholder title="Reports" />;
+const Reports = () => {
+    const [expenses, setExpenses] = useState([]);
+    const [filteredExpenses, setFilteredExpenses] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // Filter States
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [category, setCategory] = useState('');
+    const [categories, setCategories] = useState([]);
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    useEffect(() => {
+        applyFilters();
+    }, [expenses, startDate, endDate, category, applyFilters]);
+
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const [expensesRes, categoriesRes] = await Promise.all([
+                axios.get('/expenses/'),
+                axios.get('/categories/')
+            ]);
+
+            setCategories(categoriesRes.data);
+
+            // Process expenses: Sort ASC by date for the Petty Cash Book
+            const sortedData = expensesRes.data.sort((a, b) => new Date(a.expense_date) - new Date(b.expense_date));
+
+            let balance = 0;
+            const processedData = sortedData.map(item => {
+                balance += Number(item.amount);
+                return { ...item, runningBalance: balance };
+            });
+
+            setExpenses(processedData);
+            setFilteredExpenses(processedData);
+        } catch (err) {
+            console.error("Error fetching report data:", err);
+            setError("Failed to load report data. Please try again later.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const applyFilters = () => {
+        let data = [...expenses];
+
+        if (startDate) {
+            data = data.filter(item => new Date(item.expense_date) >= new Date(startDate));
+        }
+
+        if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            data = data.filter(item => new Date(item.expense_date) <= end);
+        }
+
+        if (category) {
+            data = data.filter(item => item.category?.toString() === category || item.category_name === category);
+        }
+
+        setFilteredExpenses(data);
+    };
+
+    const exportPDF = () => {
+        const doc = new jsPDF();
+
+        // Header Section
+        doc.setFontSize(22);
+        doc.setTextColor(44, 62, 80);
+        doc.text("PettyPro", 14, 22);
+
+        doc.setFontSize(14);
+        doc.setTextColor(100);
+        doc.text("Petty Cash Book Report", 14, 32);
+
+        doc.setDrawColor(44, 62, 80);
+        doc.setLineWidth(0.5);
+        doc.line(14, 35, 196, 35);
+
+        // Report Info
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        const period = startDate || endDate ?
+            `${startDate || 'Beginning'} to ${endDate || 'Today'}` :
+            'All Time';
+
+        doc.text(`Period: ${period}`, 14, 45);
+        doc.text(`Currency: TZS (Tanzanian Shilling)`, 14, 50);
+        doc.text(`Generated Date: ${formatDate(new Date().toISOString())}`, 14, 55);
+
+        const tableColumn = ["Date", "Voucher No", "Category", "Description", "Debit (TZS)", "Credit (TZS)", "Balance (TZS)"];
+        const tableRows = filteredExpenses.map(item => [
+            formatDate(item.expense_date),
+            item.id,
+            item.category_name || 'General',
+            item.note,
+            formatCurrency(item.amount).replace('TZS', '').trim(),
+            "-",
+            formatCurrency(item.runningBalance).replace('TZS', '').trim()
+        ]);
+
+        doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 65,
+            theme: 'striped',
+            headStyles: { fillColor: [44, 62, 80], textColor: [255, 255, 255], fontStyle: 'bold' },
+            footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [249, 250, 251] },
+            styles: { fontSize: 9, cellPadding: 3 },
+            columnStyles: {
+                4: { halign: 'right' },
+                5: { halign: 'right' },
+                6: { halign: 'right' }
+            }
+        });
+
+        const finalY = doc.lastAutoTable.finalY + 10;
+        doc.setFontSize(10);
+        doc.text(`Total Transactions: ${filteredExpenses.length}`, 14, finalY);
+
+        doc.save(`PettyCash_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+    };
+
+    const resetFilters = () => {
+        setStartDate('');
+        setEndDate('');
+        setCategory('');
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Petty Cash Book</h1>
+                    <p className="text-gray-500 mt-1">Generate and export official accounting reports.</p>
+                </div>
+
+                <button
+                    onClick={exportPDF}
+                    disabled={filteredExpenses.length === 0}
+                    className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                >
+                    <FileEarmarkPdfFill className="w-4 h-4 mr-2" />
+                    Export Professional PDF
+                </button>
+            </div>
+
+            {/* Filters Card */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <div className="flex items-center gap-2 mb-4 text-gray-700 font-semibold">
+                    <FunnelFill className="w-4 h-4 text-indigo-500" />
+                    <span>Report Filters</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">From Date</label>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">To Date</label>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</label>
+                        <select
+                            value={category}
+                            onChange={(e) => setCategory(e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm appearance-none"
+                        >
+                            <option value="">All Categories</option>
+                            {categories.map(cat => (
+                                <option key={cat.id} value={cat.name}>{cat.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="flex gap-2">
+                        <button
+                            onClick={resetFilters}
+                            className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                            <ArrowClockwise className="w-4 h-4 mr-2" />
+                            Reset
+                        </button>
+                        <button
+                            onClick={fetchData}
+                            className="p-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                            title="Refresh Data"
+                        >
+                            <ArrowClockwise className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {error ? (
+                <div className="bg-red-50 border border-red-100 text-red-700 p-4 rounded-xl flex items-center gap-3">
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                    {error}
+                </div>
+            ) : loading ? (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 flex flex-col items-center justify-center space-y-4">
+                    <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-gray-500 font-medium">Preparing your report...</p>
+                </div>
+            ) : (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <PettyCashTable expenses={filteredExpenses} />
+
+                    {filteredExpenses.length === 0 && (
+                        <div className="p-12 text-center">
+                            <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-50 rounded-full mb-4">
+                                <FunnelFill className="w-8 h-8 text-gray-300" />
+                            </div>
+                            <p className="text-gray-500 font-medium">No records matching your filters.</p>
+                            <button onClick={resetFilters} className="text-indigo-600 text-sm font-semibold mt-2 hover:underline">
+                                Clear all filters
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default Reports;
