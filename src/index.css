@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans antialiased text-secondary bg-gray-50;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .bg-gradient-brand {
+    @apply bg-gradient-to-br from-primary-light/10 to-neutral;
+  }
+  
+  .glass-panel {
+    @apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-soft;
+  }
+}
