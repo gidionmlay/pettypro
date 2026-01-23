@@ -2,7 +2,8 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
-from .models import Expense, Wallet
+from .models import Expense, Wallet, Profile
+from django.contrib.auth.models import User
 from .serializers import ExpenseSerializer
 from django.db.models import Sum
 from django.utils import timezone
@@ -92,6 +93,12 @@ def notify_dashboard_update(sender, instance, **kwargs):
                 "data": {
                     "dashboard": dashboard_data,
                     "expenses": expenses_data
-                }
+                 }
             }
         )
+
+@receiver(post_save, sender=User)
+def create_or_update_user_profile(sender, instance, created, **kwargs):
+    if created:
+        Profile.objects.get_or_create(user=instance)
+    instance.profile.save()

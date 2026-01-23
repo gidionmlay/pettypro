@@ -1,6 +1,21 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+import os
+
+def profile_avatar_path(instance, filename):
+    # Upload to media/avatars/user_id/filename
+    return f'avatars/{instance.user.id}/{filename}'
+
+class Profile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    display_name = models.CharField(max_length=255, blank=True)
+    avatar = models.ImageField(upload_to=profile_avatar_path, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username}'s Profile"
 
 class Organization(models.Model):
     name = models.CharField(max_length=255)

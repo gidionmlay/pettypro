@@ -9,13 +9,16 @@ import {
     Wallet2,
     CreditCard,
     PiggyBank,
-    ArrowClockwise
+    ArrowClockwise,
+    Bank
 } from 'react-bootstrap-icons';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import AddExpenseModal from '../components/features/AddExpenseModal';
 import { dashboardApi } from '../api/dashboard.api';
+import { useAuth } from '../context/AuthContext';
 import useWebSocket from '../hooks/useWebSocket';
+import { formatCurrency } from '../utils/formatters';
 
 const StatCard = ({ title, amount, trend, icon: StatIcon, gradient }) => {
     const isNegative = trend?.startsWith('-');
@@ -43,7 +46,7 @@ const StatCard = ({ title, amount, trend, icon: StatIcon, gradient }) => {
             <div className="mt-4">
                 <p className={`text-sm font-medium ${gradient ? 'text-white/80' : 'text-gray-500'}`}>{title}</p>
                 <h3 className={`text-2xl font-bold mt-1 ${gradient ? 'text-white' : 'text-gray-900'}`}>
-                    {typeof amount === 'number' ? `$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : amount}
+                    {typeof amount === 'number' ? formatCurrency(amount) : amount}
                 </h3>
             </div>
         </Card>
@@ -51,6 +54,7 @@ const StatCard = ({ title, amount, trend, icon: StatIcon, gradient }) => {
 };
 
 const Dashboard = () => {
+    const { user } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -116,7 +120,9 @@ const Dashboard = () => {
             {/* Header Section */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">
+                        Welcome back, {user?.profile?.display_name || user?.first_name || 'User'}!
+                    </h1>
                     <p className="text-gray-500">Overview of your petty cash activity</p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -128,6 +134,7 @@ const Dashboard = () => {
                     >
                         <ArrowClockwise size={20} />
                     </button>
+                    <Button variant="secondary" icon={Bank} onClick={() => alert('Top-up feature is ready on the backend! Frontend modal coming soon.')}>Top up</Button>
                     <Button icon={Plus} onClick={() => setIsModalOpen(true)}>Add Expense</Button>
                 </div>
             </div>
@@ -152,16 +159,16 @@ const Dashboard = () => {
                         <div className="relative z-10 flex flex-col justify-between h-full">
                             <div>
                                 <p className="text-white/80 font-medium mb-1">Total Balance</p>
-                                <h2 className="text-4xl font-bold tracking-tight">${Number(data.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}</h2>
+                                <h2 className="text-4xl font-bold tracking-tight">{formatCurrency(data.balance)}</h2>
                             </div>
                             <div className="mt-8 pt-6 border-t border-white/20 flex justify-between">
                                 <div>
                                     <p className="text-white/60 text-sm">Income</p>
-                                    <p className="font-semibold mt-1">+${Number(data.monthly_income).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                                    <p className="font-semibold mt-1">+{formatCurrency(data.monthly_income)}</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-white/60 text-sm">Expense</p>
-                                    <p className="font-semibold mt-1">-${Number(data.monthly_expense).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                                    <p className="font-semibold mt-1">-{formatCurrency(data.monthly_expense)}</p>
                                 </div>
                             </div>
                         </div>
@@ -206,7 +213,7 @@ const Dashboard = () => {
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} prefix="$" />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} />
                                     <Tooltip
                                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
                                     />
@@ -247,7 +254,7 @@ const Dashboard = () => {
                                             </div>
                                         </div>
                                         <span className="font-semibold text-gray-900 shrink-0">
-                                            -${Math.abs(Number(tx.amount)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            -{formatCurrency(tx.amount)}
                                         </span>
                                     </div>
                                 ))

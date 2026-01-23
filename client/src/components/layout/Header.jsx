@@ -12,12 +12,17 @@ const Header = ({ onMenuClick }) => {
         return (user?.email?.[0] || 'U').toUpperCase();
     };
 
-    const getFullName = (user) => {
+    const getDisplayName = (user) => {
+        if (user?.profile?.display_name) {
+            return user.profile.display_name;
+        }
         if (user?.first_name || user?.last_name) {
             return `${user.first_name || ''} ${user.last_name || ''}`.trim();
         }
         return user?.email || 'User';
     };
+
+    const avatarUrl = user?.profile?.avatar ? `${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}${user.profile.avatar}` : null;
 
     return (
         <header className="sticky top-0 z-20 px-6 py-4 bg-gray-50/80 backdrop-blur-md">
@@ -52,11 +57,15 @@ const Header = ({ onMenuClick }) => {
                     <div className="h-8 w-px bg-gray-200 mx-1 hidden sm:block"></div>
 
                     <button className="flex items-center gap-3 pl-1 pr-2 py-1 rounded-xl hover:bg-white hover:shadow-sm transition-all group">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 text-white flex items-center justify-center font-medium shadow-md group-hover:scale-105 transition-transform">
-                            {getInitials(user)}
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 text-white flex items-center justify-center font-medium shadow-md group-hover:scale-105 transition-transform overflow-hidden">
+                            {avatarUrl ? (
+                                <img src={avatarUrl} alt="User Avatar" className="w-full h-full object-cover" />
+                            ) : (
+                                getInitials(user)
+                            )}
                         </div>
                         <div className="hidden sm:block text-left">
-                            <p className="text-sm font-semibold text-gray-800 leading-none">{getFullName(user)}</p>
+                            <p className="text-sm font-semibold text-gray-800 leading-none">{getDisplayName(user)}</p>
                             <p className="text-xs text-gray-500 mt-1">{user?.is_staff ? 'Admin' : 'User'}</p>
                         </div>
                     </button>

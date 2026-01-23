@@ -2,14 +2,21 @@ from rest_framework import serializers
 from dj_rest_auth.registration.serializers import RegisterSerializer
 from django.db import transaction
 from django.contrib.auth.models import User
-from .models import Organization, Wallet, Category, Expense
+from .models import Organization, Wallet, Category, Expense, Profile
 
 
+
+class ProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ['display_name', 'avatar']
 
 class UserSerializer(serializers.ModelSerializer):
+    profile = ProfileSerializer(read_only=True)
+    
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'profile']
 
 class CustomRegisterSerializer(RegisterSerializer):
     username = None
@@ -23,7 +30,7 @@ class CustomRegisterSerializer(RegisterSerializer):
             )
             Wallet.objects.create(
                 organization=org,
-                balance=0.00
+                balance=1000000.00
             )
             # Create default categories
             default_categories = ['Office Supplies', 'Travel', 'Meals']
@@ -52,10 +59,11 @@ class CategorySerializer(serializers.ModelSerializer):
 class ExpenseSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
+    organization_name = serializers.CharField(source='wallet.organization.name', read_only=True)
     
     class Meta:
         model = Expense
-        fields = ['id', 'wallet', 'user', 'user_name', 'category', 'category_name', 'note', 'amount', 'status', 'expense_date', 'created_at']
+        fields = ['id', 'wallet', 'user', 'user_name', 'organization_name', 'category', 'category_name', 'note', 'amount', 'status', 'expense_date', 'created_at']
         read_only_fields = ['status', 'created_at', 'user', 'wallet']
     
     def validate_amount(self, value):

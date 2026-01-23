@@ -6,10 +6,10 @@ from dj_rest_auth.registration.views import RegisterView
 from django.db import transaction
 from django.utils import timezone
 from django.db.models import Sum
-from .models import Organization, Wallet, Category, Expense
+from .models import Organization, Wallet, Category, Expense, Profile
 from .serializers import (
     WalletSerializer, CategorySerializer, ExpenseSerializer, DashboardSerializer,
-    CustomRegisterSerializer
+    CustomRegisterSerializer, ProfileSerializer
 )
 
 class CustomRegisterView(RegisterView):
@@ -106,9 +106,14 @@ class WalletViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         return Wallet.objects.filter(organization__owner=self.request.user)
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def topup(self, request, pk=None):
         wallet = self.get_object()
+        
+        # Verify ownership
+        if wallet.organization.owner != request.user:
+            return Response({"error": "You do not have permission to top up this wallet."}, 
+                            status=status.HTTP_403_FORBIDDEN)
         amount = request.data.get('amount')
         
         try:
@@ -162,12 +167,33 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             # Lock wallet row for update
-            wallet_obj = Wallet.objects.select_for_update().get(id=wallet.id)
+            try:
+                wallet_obj = Wallet.objects.select_for_update().get(id=wallet.id)
+            except Wallet.DoesNotExist:
+                raise serializers.ValidationError({"detail": "Wallet no longer exists."})
             
             if wallet_obj.balance < amount:
-                raise serializers.ValidationError({"amount": "Insufficient wallet balance."})
+                raise serializers.ValidationError({
+                    "amount": f"Insufficient wallet balance. Available: {float(wallet_obj.balance):,.2f} TZS"
+                })
             
             wallet_obj.balance -= amount
             wallet_obj.save()
             
             serializer.save(user=self.request.user, wallet=wallet_obj, status='APPROVED')
+
+class ProfileView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        profile = request.user.profile
+        serializer = ProfileSerializer(profile)
+        return Response(serializer.data)
+
+    def put(self, request):
+        profile = request.user.profile
+        serializer = ProfileSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
